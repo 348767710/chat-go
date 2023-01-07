@@ -1,13 +1,13 @@
 package ctrl
 
 import (
-	"fmt"
 	"math/rand"
 	"net/http"
 	"reptile-go/model"
 	"reptile-go/server"
 	"reptile-go/util"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -36,18 +36,18 @@ func UserLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		r.ParseForm()
 		//1.获取前端传递过来的参数
-		mobile := r.PostForm.Get("mobile")
-		plainpwd := r.PostForm.Get("passwd")
-		if len(mobile) == 0 || len(plainpwd) == 0 {
+		username := r.PostForm.Get("username")
+		plainpwd := r.PostForm.Get("password")
+		if len(username) == 0 || len(plainpwd) == 0 {
 			util.RespFail(w, "参数错误")
 			return
 		}
-		user, err := userService.Login(mobile, plainpwd)
+		user, err := userService.Login(username, plainpwd)
 		if err != nil {
 			util.RespFail(w, err.Error())
 		} else {
 			// token
-			tokenString, _ := util.GenToken(user.Mobile)
+			tokenString, _ := util.GenToken(user.Username)
 			util.RespOk(w, user, tokenString)
 		}
 	}
@@ -76,11 +76,12 @@ func UserRegister(w http.ResponseWriter, r *http.Request) {
 	// 解析参数
 	if r.Method == http.MethodPost {
 		r.ParseForm()
-		mobile := r.PostForm.Get("mobile")
+		username := r.PostForm.Get("username")
+		nickname := r.PostForm.Get("nickname")
 		plainpwd := r.PostForm.Get("passwd")
 		uuid := r.PostForm.Get("uuid")
 		code := r.PostForm.Get("code")
-		if len(mobile) == 0 || len(plainpwd) == 0 || len(code) == 0 || len(uuid) == 0 {
+		if len(username) == 0 || len(plainpwd) == 0 || len(code) == 0 || len(uuid) == 0 {
 			util.RespFail(w, "参数错误")
 			return
 		}
@@ -91,10 +92,10 @@ func UserRegister(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rand.Seed(time.Now().UnixNano()) // 设置种子数为当前时间
-		nickname := fmt.Sprintf("user%06d", rand.Int31())
+		//nickname := fmt.Sprintf("user%06d", rand.Int31())
 		avatar := ""
 		sex := model.SEX_UNKNOW
-		user, err := userService.Register(mobile, plainpwd, nickname, avatar, sex)
+		user, err := userService.Register(username, plainpwd, nickname, avatar, sex)
 		if err != nil {
 			util.RespFail(w, err.Error())
 		} else {
@@ -153,18 +154,53 @@ func UpdateUserNickname(w http.ResponseWriter, r *http.Request) {
 	util.RespOk(w, nil, "")
 }
 
+//获取用户数据
+func GetUser(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	userid := r.PostForm.Get("userid")
+	if len(userid) == 0 {
+		util.RespFail(w, "参数错误")
+		return
+	}
+	id, _ := strconv.Atoi(userid)
+	user, _ := userService.GetUser(int64(id))
+	util.RespOk(w, user, "")
+}
+
+//通过手机账号获取用户数据
+func GetUserByName(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	mobile := r.PostForm.Get("mobile")
+	if len(mobile) == 0 {
+		util.RespFail(w, "参数错误")
+		return
+	}
+	id, _ := strconv.Atoi(mobile)
+	user, _ := userService.GetUserByName(int64(id))
+	util.RespOk(w, user, "")
+}
+
+//批量获取用户数据
+func GetUserByIds(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	ids := r.PostForm.Get("ids")
+	ids_arr := strings.Split(ids, ",")
+	user := userService.GetUserByIds(ids_arr)
+	util.RespOkList(w, user, len(user))
+}
+
 //更新用户密码
 func Editpwd(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	userid := r.PostForm.Get("userid")
-	password := r.PostForm.Get("password")
+	userid := r.PostForm.Get("userId")
+	password := r.PostForm.Get("newPassword")
 	if len(userid) == 0 || len(password) == 0 {
 		util.RespFail(w, "参数错误")
 		return
 	}
 	id, _ := strconv.Atoi(userid)
 	userService.EditUserPwd(int64(id), password)
-	util.RespOk(w, nil, "")
+	util.RespOk(w, nil, "成功")
 }
 
 //退出登陆

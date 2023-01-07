@@ -12,9 +12,9 @@ type ContactValidate struct {
 }
 
 func (validatec *ContactValidate) ContactValidates(userid, dstid int64) (string, error) {
-	contact := &model.Contact{
-		Ownerid: userid,
-		Dstobj:  dstid,
+	contact := &model.ChatFriends{
+		UserId: userid,
+		FriendId:  dstid,
 	}
 	// 创建 Validation 实例
 	v := validate.Struct(contact)

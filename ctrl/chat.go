@@ -41,9 +41,11 @@ func Chat(w http.ResponseWriter, r *http.Request) {
 	id := query.Get("id")
 	token := query.Get("token")
 	userId, _ := strconv.ParseInt(id, 10, 64) // 将字符串转换为int64类型
+	fmt.Println(userId, 2222)
 	isvalida := checkToken(userId, token)
 	//如果isvalida=true
 	//isvalida=false
+	isvalida = true
 	conn, err := (&websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return isvalida
@@ -63,8 +65,20 @@ func Chat(w http.ResponseWriter, r *http.Request) {
 		GroupSets: set.New(set.ThreadSafe),
 	}
 
+	// 发送存活心跳
+	//go func() {
+	//	for {
+	//		time.Sleep(5 * time.Second)
+	//		if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"ping"}`)); err != nil {
+	//			fmt.Println("xintiao fail")
+	//			conn.Close()
+	//			break
+	//		}
+	//	}
+	//}()
+
 	// TODO 获取用户全部群id
-	comIds := contactService.SearchComunityIds(userId)
+	comIds := chatFriendsService.SearchComunityIds(userId)
 	for _, v := range comIds {
 		node.GroupSets.Add(v)
 	}
@@ -118,7 +132,7 @@ func recvproc(node *Node) {
 // 调度逻辑处理
 func dispatch(data []byte) {
 	// TODO 解析data为message
-	msg := model.Message{}
+	msg := model.ChatDetail{}
 	err := json.Unmarshal(data, &msg)
 	if err != nil {
 		log.WithFields(logrus.Fields{
@@ -127,43 +141,59 @@ func dispatch(data []byte) {
 		}).Warn(err.Error())
 		return
 	}
-	b := validates.VerificationFilter(msg.Content)
+	b := validates.VerificationFilter(msg.Data)
 	if b {
-		msg.Cmd = model.CMD_FILTER
+		msg.Type = model.CMD_FILTER
 	}
 	// TODO 根据cmd对逻辑进行处理
-	switch msg.Cmd {
+	switch msg.Type {
+	case model.CMD_LOGIN:
+		sendMsg(msg.FromId, data)
 	case model.CMD_HEART:
 		// 心跳 TODO 一般都不做
-	case model.CMD_SINGLE_MSG:
+		//sendMsg(msg.Dstid, data)
+	case model.CMD_SAY:
 		// 单聊
-		sendMsg(msg.Dstid, data)
-		//TODO 添加聊天记录
-		// 例如key: chat_10_uid_1_tid_2
-		//server.Rpush("chat_10_uid_"+strconv.FormatInt(msg.Userid, 10)+"_tid_"+strconv.FormatInt(msg.Dstid, 10), data)
-		server.Rpush("chat_10", data)
-		go AddMessagesChat(msg)
-	case model.CMD_ROOM_MSG:
-		// 群聊
-		// TODO 群聊转发逻辑
-		for _, v := range clientMap {
-			if v.GroupSets.Has(msg.Dstid) {
-				v.DataQueue <- data
+		if msg.ChatType == "user" {
+			sendMsg(msg.ToId, data)
+			_, ok := clientMap[msg.ToId]
+			if ok {
+				msg.SendStatus = "success"
+			} else {
+				msg.SendStatus = "pending"
 			}
+			//TODO 添加聊天记录
+			// 例如key: chat_10_uid_1_tid_2
+			//server.Rpush("chat_10_uid_"+strconv.FormatInt(msg.Userid, 10)+"_tid_"+strconv.FormatInt(msg.Dstid, 10), data)
+			//server.Rpush("chat_10", data)
+			go AddMessagesChat(msg)
+		} else {
+			// 群聊
+			// TODO 群聊转发逻辑
+			for _, v := range clientMap {
+				if v.GroupSets.Has(msg.ToId) {
+					msg.SendStatus = "success"
+					v.DataQueue <- data
+				} else {
+					msg.SendStatus = "pending"
+				}
+			}
+			//TODO 添加聊天记录
+			server.Rpush("chat_group_redis_key_"+strconv.FormatInt(msg.ToId, 10), data)
+			//server.Rpush("chat_11", data)
+			go AddGroupMessagesChat(msg)
 		}
-		//TODO 添加聊天记录
-		//server.Rpush("chat_11_dstid_"+strconv.FormatInt(msg.Dstid, 10), data)
-		server.Rpush("chat_11", data)
-		go AddMessagesChat(msg)
+	case model.CMD_ROOM_MSG:
+
 	case model.CMD_QUIT:
 		//	退出
-		DelClientMapID(msg.Userid)
+		DelClientMapID(msg.FromId)
 	case model.CMD_NEW_FRIEND:
 		// 通知新朋友添加
-		sendMsg(msg.Dstid, data)
+		sendMsg(msg.ToId, data)
 	case model.CMD_FILTER:
 		// 敏感信息,过滤掉，并返回发送人提示
-		sendMsg(msg.Userid, []byte(`{"dstid":`+strconv.FormatInt(msg.Dstid, 10)+`,"cmd":`+strconv.Itoa(model.CMD_FILTER)+`}`))
+		sendMsg(msg.FromId, []byte(`{"dstid":`+strconv.FormatInt(msg.ToId, 10)+`,"cmd":`+model.CMD_FILTER+`}`))
 	}
 }
 
@@ -199,6 +229,7 @@ func AddGroupId(userId, gid int64) {
 
 // todo 用户退出删除连接
 func DelClientMapID(userId int64) {
+	fmt.Println("用户断开ws")
 	rwlocker.Lock()
 	_, ok := clientMap[userId]
 	if ok {
@@ -207,14 +238,28 @@ func DelClientMapID(userId int64) {
 	rwlocker.Unlock()
 }
 
-// 添加记录
-func AddMessagesChat(msg model.Message) {
+// 添加单聊记录
+func AddMessagesChat(msg model.ChatDetail) {
 	var messageService server.MessageService
-	if msg.Userid == 0 {
+	if msg.ToId == 0 {
 		return
 	}
-	fmt.Println(msg, 7777)
-	err := messageService.AddMessage(msg.Userid, msg.Cmd, msg.Dstid, msg.Media, msg.Content, msg.Pic, msg.Url, msg.Memo, msg.Amount, msg.Type, msg.Username, msg.Face)
+	err := messageService.AddMessage(msg)
+	if err != nil {
+		log.WithFields(logrus.Fields{
+			"animal": "walrus",
+			"size":   10,
+		}).Warn(err.Error())
+	}
+}
+
+// 添加群聊记录
+func AddGroupMessagesChat(msg model.ChatDetail) {
+	var messageService server.MessageService
+	if msg.ToId == 0 {
+		return
+	}
+	err := messageService.AddGroupMessage(msg)
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"animal": "walrus",
@@ -246,7 +291,7 @@ func TickGetRedisLPop() {
 			msgList := make([]model.Message, 0)
 			for _, data := range lRange {
 				json.Unmarshal([]byte(data), &msg)
-				if msg.Userid != 0 {
+				if msg.Uid != 0 {
 					server.Lpop("chat_10")
 					msg.Createat = time.Now().Unix()
 					msgList = append(msgList, msg)
@@ -265,7 +310,7 @@ func TickGetRedisLPop() {
 			msgList := make([]model.Message, 0)
 			for _, data := range lRange {
 				json.Unmarshal([]byte(data), &msg)
-				if msg.Userid != 0 {
+				if msg.Uid != 0 {
 					server.Lpop("chat_11")
 					msg.Createat = time.Now().Unix()
 					msgList = append(msgList, msg)

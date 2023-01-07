@@ -1,30 +1,30 @@
 package model
 
 type Message struct {
-	Id       int64  `json:"id,omitempty" form:"id"`                //消息ID
-	Userid   int64  `json:"userid,string,omitempty" form:"userid"` //谁发的
-	Cmd      int    `json:"cmd,omitempty" form:"cmd"`              //群聊还是私聊
-	Dstid    int64  `json:"dstid,omitempty" form:"dstid"`          //对端用户ID/群ID
-	Media    int    `json:"media,omitempty" form:"media"`          //消息按照什么样式展示
-	Content  string `json:"content,omitempty" form:"content"`      //消息的内容
-	Pic      string `json:"pic,omitempty" form:"pic"`              //预览图片
-	Url      string `json:"url,omitempty" form:"url"`              //服务的URL
-	Memo     string `json:"memo,omitempty" form:"memo"`            //简单描述
-	Amount   int    `json:"amount,omitempty" form:"amount"`        //其他和数字相关的/其他的附加数据，语音长度/红包金额
+	Id       int64  `json:"id,omitempty" form:"id"`           //消息ID
+	Uid      int64  `json:"uid,omitempty" form:"uid"`         //谁发的
+	Cmd      int    `json:"cmd,omitempty" form:"cmd"`         //群聊还是私聊
+	Dstid    int64  `json:"dstid,omitempty" form:"dstid"`     //对端用户ID/群ID
+	Media    int    `json:"media,omitempty" form:"media"`     //消息按照什么样式展示
+	Content  string `json:"content,omitempty" form:"content"` //消息的内容
+	Pic      string `json:"pic,omitempty" form:"pic"`         //预览图片
+	Url      string `json:"url,omitempty" form:"url"`         //服务的URL
+	Memo     string `json:"memo,omitempty" form:"memo"`       //简单描述
+	Amount   int    `json:"amount,omitempty" form:"amount"`   //其他和数字相关的/其他的附加数据，语音长度/红包金额
 	Createat int64  `json:"createat,omitempty" form:"createat"`
-	Type     int    `json:"type,omitempty" form:"type"`         // 消息类型/系统消息、用户消息
+	Type     string `json:"type,omitempty" form:"type"`         // 消息类型/系统消息、用户消息
 	Username string `json:"username,omitempty" form:"username"` // 用户昵称
 	Face     string `json:"face,omitempty" form:"face"`         // 头像
 }
 
 const (
-	CMD_NEW_FRIEND = 9  // 通知好友，有新朋友添加
-	CMD_SINGLE_MSG = 10 // 点对点单聊,dstid是用户ID
-	CMD_ROOM_MSG   = 11 // 群聊消息,dstid是群id
-	CMD_HEART      = 0  // 心跳消息,不处理
-	CMD_LOGIN      = 1  // 登录
-	CMD_QUIT       = 2  // 退出
-	CMD_FILTER     = 3  // 敏感信息
+	CMD_NEW_FRIEND = "addfriend" // 通知好友，有新朋友添加
+	CMD_SAY = "say"       // 聊天
+	CMD_ROOM_MSG   = "group"     // 群聊消息,dstid是群id
+	CMD_HEART      = "ping"      // 心跳消息,不处理
+	CMD_LOGIN      = "login"     // 登录
+	CMD_QUIT       = "loginout"  // 退出
+	CMD_FILTER     = "mgxinxi"   // 敏感信息
 )
 
 const (

@@ -3,10 +3,8 @@ package server
 import (
 	"errors"
 	"fmt"
-	"reptile-go/config"
-	"reptile-go/model"
-
 	"github.com/importcjj/sensitive"
+	"reptile-go/config"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
@@ -58,10 +56,10 @@ func init() {
 	// 设置数据库最大打开的连接数
 	DbEngin.SetMaxOpenConns(2)
 	// 自动建表
-	DbEngin.Sync2(new(model.User),
-		new(model.Contact),
-		new(model.Community),
-		new(model.Message))
+	//DbEngin.Sync2(new(model.User),
+	//	new(model.Contact),
+	//	new(model.Community),
+	//	new(model.Message))
 	fmt.Println("init data base ok")
 }
 

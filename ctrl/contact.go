@@ -1,88 +1,58 @@
 package ctrl
 
 import (
+	"encoding/json"
 	"net/http"
 	"reptile-go/args"
 	"reptile-go/model"
 	"reptile-go/server"
 	"reptile-go/util"
 	"reptile-go/validates"
+	"strconv"
 )
 
-var contactService server.ContactService
+var chatFriendsService server.ChatFriendsService
 var contactValidate validates.ContactValidate
 
-/**
-@api {post} /contact/addfriend 添加好友
-@apiName 添加好友
-@apiGroup 好友
-@apiParam {Number} userid Users unique ID.
-@apiParam {Number} dstid 好友ID.
-@apiSuccessExample Success-Response:
-HTTP/1.1 200 OK
-{
-	"code": 0,
-	"data": "",
-	"msg": "xxx"
-}
-@apiError UserNotFound The id of the User was not found.
-@apiErrorExample Error-Response:
-HTTP/1.1 404 Not Found
-{
-	"code": -1,
-	"msg": "xxx"
-}
-*/
+//添加好友
 func Addfriend(w http.ResponseWriter, r *http.Request) {
 	var arg args.ContactArg
 	util.Bind(r, &arg)
-	contactValidates, err := contactValidate.ContactValidates(arg.Userid, arg.Dstid)
+	contactValidates, err := contactValidate.ContactValidates(arg.Userid, arg.FriendId)
 	if err != nil {
 		util.RespFail(w, contactValidates)
 		return
 	}
 	//调用service
-	err = contactService.AddFriend(arg.Userid, arg.Dstid)
+	err = chatFriendsService.AddFriend(arg.Userid, arg.FriendId)
 	if err != nil {
 		util.RespFail(w, err.Error())
 	} else {
 		util.RespOk(w, nil, "好友添加成功")
 	}
 }
+//删除好友双向删除
+func Delfriend(w http.ResponseWriter, r *http.Request) {
+	var arg args.ContactArg
+	util.Bind(r, &arg)
+	contactValidates, err := contactValidate.ContactValidates(arg.Userid, arg.FriendId)
+	if err != nil {
+		util.RespFail(w, contactValidates)
+		return
+	}
+	//调用service
+	err = chatFriendsService.DelFriend(arg.Userid, arg.FriendId)
+	if err != nil {
+		util.RespFail(w, err.Error())
+	} else {
+		util.RespOk(w, nil, "好友删除成功")
+	}
+}
 
 /**
 @api {post} /contact/loadfriend 加载好友列表
-@apiName 加载好友列表
-@apiGroup 好友
-@apiParam {Number} userid Users unique ID.
-@apiSuccessExample Success-Response:
-HTTP/1.1 200 OK
-{
-	"code": 0,
-	"msg": "xxx"
-	"rows": [
-		{
-			avatar: "头像"
-			createat: "2020-04-02T17:32:57+08:00"
-			id: 2
-			memo: ""
-			mobile: "账号"
-			nickname: "昵称"
-			online: 0
-			sex: "U"
-			token: "C6628AEC84FB7713FA9BE3A28A25BA50"
-		},
-	],
-	"total": total,
-}
-@apiError UserNotFound The id of the User was not found.
-@apiErrorExample Error-Response:
-HTTP/1.1 404 Not Found
-{
-	"code": -1,
-	"msg": "xxx"
-}
 */
+
 func LoadFriend(w http.ResponseWriter, r *http.Request) {
 	var arg args.ContactArg
 	util.Bind(r, &arg)
@@ -90,7 +60,7 @@ func LoadFriend(w http.ResponseWriter, r *http.Request) {
 		util.RespFail(w, "参数错误")
 		return
 	}
-	users := contactService.SearchFriend(arg.Userid)
+	users := chatFriendsService.SearchFriend(arg.Userid)
 	util.RespOkList(w, users, len(users))
 }
 
@@ -120,13 +90,13 @@ HTTP/1.1 404 Not Found
 }
 */
 func CreateCommunity(w http.ResponseWriter, r *http.Request) {
-	var arg model.Community
+	var arg model.ChatGroup
 	util.Bind(r, &arg)
-	if arg.Ownerid == 0 || len(arg.Name) == 0 || len(arg.Icon) == 0 {
+	if arg.AdminId == 0 || len(arg.Title) == 0 {
 		util.RespFail(w, "参数错误")
 		return
 	}
-	conn, err := contactService.CreateCommunity(arg)
+	conn, err := chatFriendsService.CreateCommunity(arg)
 	if err != nil {
 		util.RespFail(w, err.Error())
 	} else {
@@ -159,16 +129,21 @@ HTTP/1.1 404 Not Found
 	"msg": "xxx"
 }
 */
+//添加群成员
 func JoinCommunity(w http.ResponseWriter, r *http.Request) {
-	var arg args.ContactArg
-	util.Bind(r, &arg)
-	if arg.Userid == 0 || arg.Dstid == 0 {
+	var arg []args.GroupArg
+	s := r.Form.Get("data")
+	err := json.Unmarshal([]byte(s), &arg)
+	if err != nil {
 		util.RespFail(w, "参数错误")
 		return
 	}
-	err := contactService.JoinCommunity(arg.Userid, arg.Dstid)
+
+	err = chatFriendsService.JoinCommunity(arg)
 	//todo 刷新用户的群组信息
-	AddGroupId(arg.Userid, arg.Dstid)
+	for _, v := range arg {
+		AddGroupId(v.UserId, v.GroupId)
+	}
 	if err != nil {
 		util.RespFail(w, err.Error())
 	} else {
@@ -181,32 +156,6 @@ func JoinCommunity(w http.ResponseWriter, r *http.Request) {
 @apiName 获取群列表
 @apiGroup 群
 
-@apiParam {Number} userid 用户ID
-@apiSuccessExample Success-Response:
-HTTP/1.1 200 OK
-{
-"code": 0,
-"msg": "xxx"
-"rows": [
-	{
-		"id": 1,
-		"Name": "1群",
-		"ownerid": 1,
-		"icon": "/mnt/1584786931964894457.jpg",
-		"cate": 1,
-		"memo": "1231",
-		"createat": "2020-03-21T18:35:39+08:00"
-	},
-],
-"total": total,
-}
-@apiErrorExample Error-Response:
-HTTP/1.1 404 Not Found
-{
-	"code": -1,
-	"msg": "xxx"
-}
-@apiUse CommonError
 */
 func LoadCommunity(w http.ResponseWriter, r *http.Request) {
 	var arg args.ContactArg
@@ -215,6 +164,91 @@ func LoadCommunity(w http.ResponseWriter, r *http.Request) {
 		util.RespFail(w, "参数错误")
 		return
 	}
-	comunitys := contactService.SearchComunity(arg.Userid)
+	comunitys := chatFriendsService.SearchComunity(arg.Userid)
 	util.RespOkList(w, comunitys, len(comunitys))
+}
+
+//获取单个群详情
+func GetOneGroupInfo(w http.ResponseWriter, r *http.Request) {
+	var arg args.GroupArg
+	util.Bind(r, &arg)
+	if arg.GroupId == 0 {
+		util.RespFail(w, "参数错误")
+		return
+	}
+
+	groupInfo, _ := chatFriendsService.ShowCommunityID(arg.GroupId)
+
+	util.RespOk(w, groupInfo, "")
+}
+
+//批量获取群详情
+func GetGroupInfo(w http.ResponseWriter, r *http.Request) {
+	var arg args.ContactArg
+	util.Bind(r, &arg)
+	if arg.Userid == 0 {
+		util.RespFail(w, "参数错误")
+		return
+	}
+	//获取群ids
+	comunitys := chatFriendsService.SearchComunityIds(arg.Userid)
+
+	groupInfo := chatFriendsService.GetGroupInfo(comunitys)
+	for k, v := range groupInfo {
+		userIds := chatFriendsService.GetGroupUserByIds(v.Id)
+		groupUsers := userService.GetUserByIds(userIds)
+		groupInfo[k].GroupUsers = groupUsers
+	}
+
+	util.RespOkList(w, groupInfo, len(groupInfo))
+}
+
+func AddGroupChatDetailIds(w http.ResponseWriter, r *http.Request) {
+	var arg []args.GroupChatDetailIds
+	s := r.Form.Get("data")
+	err := json.Unmarshal([]byte(s), &arg)
+	if err != nil {
+		util.RespFail(w, "参数错误")
+		return
+	}
+
+	//调用service
+	err = chatFriendsService.AddGroupChatDetailIds(arg)
+	if err != nil {
+		util.RespFail(w, err.Error())
+	} else {
+		util.RespOk(w, nil, "")
+	}
+}
+
+//好友备注
+func FriendPetName(w http.ResponseWriter, r *http.Request) {
+	var arg args.ContactArg
+	util.Bind(r, &arg)
+	contactValidates, err := contactValidate.ContactValidates(arg.Userid, arg.FriendId)
+	if err != nil {
+		util.RespFail(w, contactValidates)
+		return
+	}
+	//调用service
+	err = chatFriendsService.FriendPetName(arg.Userid, arg.FriendId,arg.PetName)
+	if err != nil {
+		util.RespFail(w, err.Error())
+	} else {
+		util.RespOk(w, nil, "设置成功")
+	}
+}
+
+//修改群名称
+func UpdateGroupName(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	group_id := r.PostForm.Get("group_id")
+	nickname := r.PostForm.Get("nickname")
+	if len(group_id) == 0 || len(nickname) == 0 {
+		util.RespFail(w, "参数错误")
+		return
+	}
+	id, _ := strconv.Atoi(group_id)
+	chatFriendsService.UpdateGroupName(int64(id), nickname)
+	util.RespOk(w, nil, "")
 }

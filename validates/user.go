@@ -11,8 +11,8 @@ type UserValidate struct {
 
 func (validatec *ContactValidate) UserValidates(userid, dstid int64) (string, error) {
 	contact := &model.User{
-		Mobile: "",
-		Passwd: "",
+		Username: "",
+		Password: "",
 		Avatar: "",
 		Token:  "",
 	}
